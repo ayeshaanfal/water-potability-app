@@ -3,7 +3,7 @@ import numpy as np
 import joblib
 from water_rules import rule_based_check
 
-# Load model (MAKE SURE this is 5-feature trained model)
+# Load model
 model = joblib.load("water_model.pkl")
 
 st.title("💧 AI Smart Water Quality Advisor")
@@ -14,8 +14,8 @@ st.write("Enter key water quality parameters:")
 ph = st.number_input("pH (0–14 scale)", 0.0, 14.0, 7.0)
 Solids = st.number_input("Total Dissolved Solids (TDS)")
 Chloramines = st.number_input("Chloramines (mg/L)")
-Organic_carbon = st.number_input("Organic Carbon")
-Turbidity = st.number_input("Turbidity")
+Organic_carbon = st.number_input("Organic Carbon (mg/L)")
+Turbidity = st.number_input("Turbidity (NTU)")
 
 # ---------------- UNIT SELECTORS ----------------
 st.subheader("Optional Unit Selection")
@@ -38,11 +38,11 @@ Typical Safe Limits:
 def convert_inputs(ph, tds, chloramines, organic_carbon, turbidity,
                    tds_unit, carbon_unit, turbidity_unit):
 
-    # TDS (ppm ≈ mg/L)
+    # TDS conversion (ppm ≈ mg/L)
     if tds_unit == "ppm":
         tds = tds
 
-    # Organic Carbon (g/L → mg/L)
+    # Organic Carbon conversion
     if carbon_unit == "g/L":
         organic_carbon = organic_carbon * 1000
 
@@ -58,14 +58,13 @@ if st.button("Check Water Safety"):
         tds_unit, carbon_unit, turbidity_unit
     )
 
-    # 5-feature input for ML model
+    # ---------------- ML INPUT (5 FEATURES ONLY) ----------------
     input_data = np.array([[ph, Solids, Chloramines, Organic_carbon, Turbidity]])
 
-    # ML prediction
     probability = model.predict_proba(input_data)[0][1]
     risk_score = round((1 - probability) * 100, 2)
 
-    # Rule check
+    # ---------------- RULE CHECK ----------------
     user_data = {
         "ph": ph,
         "Solids": Solids,
@@ -76,27 +75,45 @@ if st.button("Check Water Safety"):
 
     violations = rule_based_check(user_data)
 
+    # ---------------- FINAL DECISION (FIXED LOGIC) ----------------
+
+    if len(violations) > 0:
+        status = "UNSAFE"
+        grade = "D"
+
+    elif (
+        6.5 <= ph <= 8.5 and
+        Solids < 500 and
+        Chloramines < 4 and
+        Organic_carbon < 5 and
+        Turbidity < 1
+    ):
+        status = "SAFE"
+        grade = "A"
+
+    elif probability >= 0.85:
+        status = "SAFE"
+        grade = "A"
+
+    elif probability >= 0.70:
+        status = "NEEDS TREATMENT"
+        grade = "C"
+
+    else:
+        status = "NEEDS TREATMENT"
+        grade = "D"
+
     # ---------------- OUTPUT ----------------
     st.subheader(f"Safe Water Probability: {probability*100:.2f} %")
     st.subheader(f"Health Risk Score: {risk_score:.2f} %")
-
     st.progress(int(probability * 100))
-
-    # Grade system
-    if probability >= 0.90:
-        grade = "A"
-    elif probability >= 0.85:
-        grade = "B"
-    elif probability >= 0.70:
-        grade = "C"
-    else:
-        grade = "D"
 
     st.subheader(f"Water Quality Grade: {grade}")
 
-    # Decision logic
-    if len(violations) > 0:
+    # ---------------- RESULT DISPLAY ----------------
+    if status == "UNSAFE":
         st.error("🚨 UNSAFE WATER")
+
         st.write("Issues detected:")
         for v in violations:
             st.write("•", v)
@@ -113,7 +130,7 @@ if st.button("Check Water Safety"):
         if "High Turbidity" in violations:
             st.write("• Use Sediment Filter")
 
-    elif probability >= 0.85:
+    elif status == "SAFE":
         st.success("✅ SAFE TO DRINK")
 
     else:
