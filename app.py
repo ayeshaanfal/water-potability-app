@@ -4,7 +4,7 @@ import joblib
 from water_rules import rule_based_check
 
 # Load model (MAKE SURE this is 5-feature trained model)
-model = joblib.load("water_model.pkl")
+model = joblib.load("water_model(1).pkl")
 
 st.title("💧 AI Smart Water Quality Advisor")
 
