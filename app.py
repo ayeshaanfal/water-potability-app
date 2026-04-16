@@ -3,7 +3,7 @@ import numpy as np
 import joblib
 from water_rules import rule_based_check
 
-# Load model (5-feature trained model)
+# Load model
 model = joblib.load("water_model.pkl")
 
 st.title("💧 AI Smart Water Quality Advisor")
@@ -36,18 +36,13 @@ Typical Safe Limits:
 def convert_inputs(ph, tds, chloramines, organic_carbon, turbidity,
                    tds_unit, carbon_unit, turbidity_unit):
 
-    # ppm ≈ mg/L (no change needed)
-    if tds_unit == "ppm":
-        tds = tds
-
-    # g/L → mg/L
     if carbon_unit == "g/L":
         organic_carbon = organic_carbon * 1000
 
     return ph, tds, chloramines, organic_carbon, turbidity
 
 
-# ================= PREDICTION =================
+# ================= BUTTON =================
 if st.button("Check Water Safety"):
 
     # Convert units
@@ -56,13 +51,11 @@ if st.button("Check Water Safety"):
         tds_unit, carbon_unit, turbidity_unit
     )
 
-    # ML input (5 features)
+    # ML input
     input_data = np.array([[ph, Solids, Chloramines, Organic_carbon, Turbidity]])
-
-    # -------- ML BASE PREDICTION --------
     probability = model.predict_proba(input_data)[0][1]
 
-    # -------- RULE CHECK --------
+    # Rule check
     user_data = {
         "ph": ph,
         "Solids": Solids,
@@ -73,28 +66,17 @@ if st.button("Check Water Safety"):
     violations = rule_based_check(user_data)
 
     # ===== SMART PROBABILITY CALIBRATION =====
-
-    # Case 1 — Unsafe water → strong penalty
     if len(violations) > 0:
         probability = probability * 0.4
 
-    # Case 2 — PERFECT water → strong boost
-    elif (6.5 <= ph <= 8.5 and
-          Solids < 300 and
-          Chloramines < 3 and
-          Organic_carbon < 3 and
-          Turbidity < 0.5):
+    elif (6.5 <= ph <= 8.5 and Solids < 300 and Chloramines < 3 and
+          Organic_carbon < 3 and Turbidity < 0.5):
         probability = min(probability + 0.35, 0.99)
 
-    # Case 3 — GOOD water → small boost
-    elif (6.5 <= ph <= 8.5 and
-          Solids < 500 and
-          Chloramines < 4 and
-          Organic_carbon < 5 and
-          Turbidity < 1):
+    elif (6.5 <= ph <= 8.5 and Solids < 500 and Chloramines < 4 and
+          Organic_carbon < 5 and Turbidity < 1):
         probability = min(probability + 0.20, 0.95)
 
-    # Final risk score
     risk_score = round((1 - probability) * 100, 2)
 
     # ===== FINAL DECISION =====
@@ -102,19 +84,16 @@ if st.button("Check Water Safety"):
         status = "UNSAFE"
         grade = "D"
 
-    elif probability >= 0.85:
-        status = "SAFE"
-        grade = "A"
-
-    elif probability >= 0.70:
-        status = "NEEDS TREATMENT"
-        grade = "C"
-
     else:
-        status = "NEEDS TREATMENT"
-        grade = "D"
+        status = "SAFE"
+        if probability >= 0.85:
+            grade = "A"
+        elif probability >= 0.70:
+            grade = "B"
+        else:
+            grade = "C"
 
-    # ================= OUTPUT =================
+    # ===== OUTPUT =====
     st.subheader(f"Safe Water Probability: {probability*100:.2f} %")
     st.subheader(f"Health Risk Score: {risk_score:.2f} %")
     st.progress(int(probability * 100))
@@ -127,7 +106,7 @@ if st.button("Check Water Safety"):
         for v in violations:
             st.write("•", v)
 
-        st.write("Recommended Treatment:")
+        st.write("### Recommended Treatment:")
         if "Unsafe pH" in violations:
             st.write("• Use Neutralizing Filter")
         if "High TDS" in violations:
@@ -142,8 +121,12 @@ if st.button("Check Water Safety"):
     elif status == "SAFE":
         st.success("✅ SAFE TO DRINK")
 
-    else:
-        st.warning("⚠️ NEEDS TREATMENT")
+        # 👇 ADD TREATMENT FOR BORDERLINE WATER
+        if grade == "C":
+            st.warning("Water is safe but quality can be improved:")
+            st.write("• Install basic home water filter")
+            st.write("• Periodic cleaning of storage tanks")
+            st.write("• Use UV purifier for extra safety")
 
 # ---------------- FOOTER ----------------
 st.markdown("---")
